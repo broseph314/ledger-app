@@ -47,6 +47,8 @@ class TransactionController extends Controller
         try {
             $v = $request->validated();
 
+//            return Carbon::parse($v['date']);
+
             if(isset($v['from_ledger_id'])) {
                 $expense = Transaction::create([
                     'ledger_id' => $v['from_ledger_id'],
@@ -54,7 +56,6 @@ class TransactionController extends Controller
                     'occurred_at' => Carbon::parse($v['date'] ?? now()),
                     'description' => 'Internal transfer from ' . ($v['description'] ?? 'another ledger'),
                     'type' => 'debit',
-                    'occurred_on' => now(),
                 ]);
             }
 
@@ -68,7 +69,6 @@ class TransactionController extends Controller
                 'occurred_at' => Carbon::parse($v['date'] ?? now()),
                 'description' => $v['description'] ?? 'Income',
                 'type' => 'credit',
-                'occurred_on' => now(),
             ]);
 
             $data = [

@@ -14,7 +14,7 @@ class Transaction extends Model
         'type',
         'from_ledger_id',
         'recurring_id',
-        'occurred_on',
+        'occurred_at',
     ];
     public function ledger()
     {
