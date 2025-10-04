@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/transactions', function () {
@@ -13,3 +14,13 @@ Route::get('/forecast', function () {
 Route::get('/balance', function () {
     return response()->json(['message' => 'Balance endpoint']);
 })->name('api.balance');
+
+Route::post('/income', function () {
+    return response()->json(['message' => 'Income endpoint']);
+})->name('api.income');
+
+Route::post('/expense', function (Request $request) {
+    return response()->json(
+        ['message' => 'Expense endpoint']
+    );
+})->name('api.expense');
