@@ -56,7 +56,7 @@ Allowed parameters
     "amount": float,                         // dollar value of transactions
     "date": string,                          // [OPTIONAL] datetime of transaction - leaving blank will default to now() when processed
     "description": string,                   // [OPTIONAL] brief description of the transaction
-    "ledger_id": int,                        // the ledger being posted to - this 
+    "ledger_id": int,                        // the ledger being posted to - this needs to be a ledger that exists in the app (you can look at the sample data in the /balance endpoint)
     "frequency": string,                     // [OPTIONAL] if this is a recurring transaction, how often it should be processed. Can be 'weekly','fortnightly','monthly','yearly'
     "end_date": string                       // [OPTIONAL - BUT REQUIRED IF FREQUENCY IS GIVEN] when the recurring transaction will finish
 ```
