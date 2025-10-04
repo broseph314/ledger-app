@@ -6,10 +6,47 @@ use App\Http\Requests\StoreExpenseRequest;
 use App\Http\Requests\StoreIncomeRequest;
 use App\Models\Recurring;
 use App\Models\Transaction;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Request;
 
 class TransactionController extends Controller
 {
+    public function index(Request $request): JsonResponse
+    {
+        // Basic: return ALL transactions newest first, with useful context
+        $transactions = Transaction::query()
+            ->with([
+                'ledger:id,name,entity_id',
+                'ledger.entity:id,name,business_id',
+                'ledger.entity.business:id,name',
+            ])
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $data = $transactions->map(function ($t) {
+            return [
+                'id'          => $t->id,
+                'ledger_id'   => $t->ledger_id,
+                'business'    => $t->ledger?->entity?->business?->name,
+                'entity'      => $t->ledger?->entity?->name,
+                'ledger'      => $t->ledger?->name,
+                'type'        => $t->type,
+                'amount'      => (float) $t->amount,
+                'description' => $t->description,
+                'occurred_at' => $t->occurred_at
+                    ? Carbon::parse($t->occurred_at)->toIso8601String()
+                    : null,
+            ];
+        })->values();
+
+        return response()->json([
+            'count' => $data->count(),
+            'data'  => $data,
+        ]);
+    }
+
     public function storeExpense(StoreExpenseRequest $request)
     {
         try {

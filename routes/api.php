@@ -7,9 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Validator;
 
-Route::get('/transactions', function () {
-    return response()->json(['message' => 'Transactions endpoint']);
-})->name('api.transactions');
+Route::get('/transactions', [TransactionController::class, 'index'])->name('api.transactions');
 
 Route::get('/forecast', function () {
     return response()->json(['message' => 'Forecast endpoint']);
