@@ -2,6 +2,8 @@
 
 This is a prototype ledger app - not meant for any kind of production usage.
 
+# Assumptions
+
 # How to run
 
 I used laravel sail - I find it easy and quick to spin up all the things you need. So to recreate the code and get this up and running, you need a couple of things:
@@ -46,7 +48,7 @@ Before the app endpoints will actually show anything, make sure you run `./vendo
 
 At this point, you should be able to interact with all the endpoints in the `routes/api.php` file.
 
-## Routes
+# Routes
 
 ### POST localhost/api/income
 Allowed parameters
@@ -144,7 +146,40 @@ Example response:
 
 
 ### GET localhost/api/transactions
-I never got round to adding parameters, this will just dump the entire transaction list to the api endpoint. You'll get:
+I never got round to adding parameters, this will just dump the entire transaction list to the api endpoint.
+
+Example Response:
+`200 success`
+```json
+{
+    "count": 1921,
+    "data": [
+        {
+            "id": 4282,
+            "ledger_id": 2,
+            "business": "Joes Flooring",
+            "entity": "Joes Flooring Moonta",
+            "ledger": "Joes Flooring Moonta Services",
+            "type": "debit",
+            "amount": -954.42,
+            "description": "Subscription",
+            "occurred_at": "2025-10-04T17:35:23+00:00"
+        },
+        {
+            "id": 4643,
+            "ledger_id": 7,
+            "business": "Joes Carpet Cleaning",
+            "entity": "Joes Carpet Cleaning Mile End",
+            "ledger": "Joes Carpet Cleaning Mile End Revenue",
+            "type": "credit",
+            "amount": 2326.35,
+            "description": "Sale: quas pariatur",
+            "occurred_at": "2025-10-04T16:00:59+00:00"
+        },
+        ...
+    ]
+}
+```
 
 
 ### GET localhost/api/forecast
@@ -154,7 +189,214 @@ lookahead_months: int                         // [OPTIONAL] (default 12) how man
 as_at: string                                 // [OPTIONAL] 
 ```
 
+Example response:
+`localhost/api/forecast?lookahead_months=3`
+```json
+{
+    "as_at": "2025-10-04T14:47:21+00:00",
+    "until": "2025-12-31T23:59:59+00:00",
+    "data": [
+        {
+            "business_id": 1,
+            "business": "Joes Flooring",
+            "entities": [
+                {
+                    "entity_id": 1,
+                    "entity": "Joes Flooring Moonta",
+                    "ledgers": [
+                        {
+                            "ledger_id": 1,
+                            "ledger": "Joes Flooring Moonta Revenue",
+                            "opening_balance_at_as_at": 654578.98,
+                            "projected_balance_at_until": 640068.33,
+                            "projected_change": -14510.65,
+                            "monthly": [
+                                {
+                                    "month": "2025-10",
+                                    "recurring_total": -9615.4,
+                                    "historical_total": 11142.46,
+                                    "projected_change": 1527.06
+                                },
+                                {
+                                    "month": "2025-11",
+                                    "recurring_total": -8247.33,
+                                    "historical_total": 0,
+                                    "projected_change": -8247.33
+                                },
+                                {
+                                    "month": "2025-12",
+                                    "recurring_total": -7790.38,
+                                    "historical_total": 0,
+                                    "projected_change": -7790.38
+                                }
+                            ]
+                        },
+                        {
+                            "ledger_id": 2,
+                            "ledger": "Joes Flooring Moonta Services",
+                            "opening_balance_at_as_at": 53327.71,
+                            "projected_balance_at_until": 38001.7,
+                            "projected_change": -15326.01,
+                            "monthly": [
+                                {
+                                    "month": "2025-10",
+                                    "recurring_total": -4621.68,
+                                    "historical_total": -1081.85,
+                                    "projected_change": -5703.53
+                                }, ...
+                            ]
+                        }, ...
+                ]
+            }, ...
+```
+
+I never got round to adding the parameters I was planning here - but this gets all the businesses in the system, breaks them down into their entities (in this example, it's just different sites).
+
+The projected change is just a sum of all the months. Each month will check all the recurring transactions that will fall on the month, and sum them. This is the `recurring_total` property you see.
+
+The `historical_total` property is just the amount of money found in transactions in a sample month previously. It's not a very thorough way of forecasting, but its logic is separated and easy to upgrade if needed.
+
+The month-by-month data is kept in the response, in case it's needed for tabling or graphs.
+
 ### GET localhost/api/balance
 
+This just groups up all the businesses, all the entities in those businesses and all their ledgers, and displays the current balance as at endpoint call.
 
+Example response:
+```json
+{
+    "as_of": "2025-10-04T14:54:58+00:00",
+    "data": [
+        {
+            "business_id": 1,
+            "business": "Joes Flooring",
+            "entities": [
+                {
+                    "entity_id": 1,
+                    "entity": "Joes Flooring Moonta",
+                    "ledgers": [
+                        {
+                            "ledger_id": 1,
+                            "ledger": "Joes Flooring Moonta Revenue",
+                            "current_balance": 634638.5499999996
+                        },
+                        {
+                            "ledger_id": 2,
+                            "ledger": "Joes Flooring Moonta Services",
+                            "current_balance": -21960.07
+                        },
+                        {
+                            "ledger_id": 3,
+                            "ledger": "Joes Flooring Moonta Payroll",
+                            "current_balance": -16214.059999999998
+                        }
+                    ]
+                },
+                {
+                    "entity_id": 2,
+                    "entity": "Joes Flooring Plympton",
+                    "ledgers": [
+                        {
+                            "ledger_id": 4,
+                            "ledger": "Joes Flooring Plympton Revenue",
+                            "current_balance": 290328.1600000001
+                        },
+                        {
+                            "ledger_id": 5,
+                            "ledger": "Joes Flooring Plympton Services",
+                            "current_balance": -19504.810000000005
+                        },
+                        {
+                            "ledger_id": 6,
+                            "ledger": "Joes Flooring Plympton Payroll",
+                            "current_balance": -24020.479999999996
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "business_id": 2,
+            "business": "Joes Carpet Cleaning",
+            "entities": [
+                {
+                    "entity_id": 3,
+                    "entity": "Joes Carpet Cleaning Mile End",
+                    "ledgers": [
+                        {
+                            "ledger_id": 7,
+                            "ledger": "Joes Carpet Cleaning Mile End Revenue",
+                            "current_balance": 248755.51000000024
+                        },
+                        {
+                            "ledger_id": 8,
+                            "ledger": "Joes Carpet Cleaning Mile End Services",
+                            "current_balance": -31210.08999999996
+                        },
+                        {
+                            "ledger_id": 9,
+                            "ledger": "Joes Carpet Cleaning Mile End Payroll",
+                            "current_balance": -828.8600000000006
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "business_id": 3,
+            "business": "Joes Mowing",
+            "entities": [
+                {
+                    "entity_id": 4,
+                    "entity": "Joes Mowing Pt Lincoln",
+                    "ledgers": [
+                        {
+                            "ledger_id": 10,
+                            "ledger": "Joes Mowing Pt Lincoln Revenue",
+                            "current_balance": 294767.57999999984
+                        },
+                        {
+                            "ledger_id": 11,
+                            "ledger": "Joes Mowing Pt Lincoln Services",
+                            "current_balance": -19082.319999999985
+                        },
+                        {
+                            "ledger_id": 12,
+                            "ledger": "Joes Mowing Pt Lincoln Payroll",
+                            "current_balance": -24796.96
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "business_id": 4,
+            "business": "Joes Consulting",
+            "entities": [
+                {
+                    "entity_id": 5,
+                    "entity": "Joes Consulting Adelaide",
+                    "ledgers": [
+                        {
+                            "ledger_id": 13,
+                            "ledger": "Joes Consulting Adelaide Revenue",
+                            "current_balance": 374604.99999999994
+                        },
+                        {
+                            "ledger_id": 14,
+                            "ledger": "Joes Consulting Adelaide Services",
+                            "current_balance": -26532.58000000001
+                        },
+                        {
+                            "ledger_id": 15,
+                            "ledger": "Joes Consulting Adelaide Payroll",
+                            "current_balance": -34445.26
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+```
 
