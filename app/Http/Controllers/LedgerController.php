@@ -59,7 +59,7 @@ class LedgerController extends Controller
                         'ledgers'   => $entity->ledgers->map(function ($ledger) use ($asAt, $until, $withSchedule) {
                             // Base balance = starting_balance + (credits - debits) up to as_at
                             $debits   = (float) ($ledger->debit_sum ?? 0);
-                            $credits  = (float) ($ledger->credit_sum ?? 0);
+                            $credits  = (float)($ledger->credit_sum ?? 0);
                             $opening  = (float) $ledger->starting_balance + ($credits - $debits);
 
                             // Project recurring events within window
@@ -102,9 +102,9 @@ class LedgerController extends Controller
                             return [
                                 'ledger_id'                => $ledger->id,
                                 'ledger'                   => $ledger->name,
-                                'opening_balance_at_as_at' => $opening,
-                                'projected_balance_at_until' => $projected,
-                                'projected_change'         => $projected - $opening,
+                                'opening_balance_at_as_at' => round($opening,2),
+                                'projected_balance_at_until' => round($projected,2),
+                                'projected_change'         => round($projected - $opening,2),
                                 'events'                   => $withSchedule ? $events : null,
                             ];
                         })->values(),

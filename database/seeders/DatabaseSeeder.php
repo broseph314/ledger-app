@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             BusinessSeeder::class,
             EntitySeeder::class,
             LedgerSeeder::class,
+            TransactionSeeder::class,
         ];
         foreach ($seeders as $seeder) {
             $this->call($seeder);
