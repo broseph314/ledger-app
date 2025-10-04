@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\TransactionController;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
@@ -14,9 +15,7 @@ Route::get('/forecast', function () {
     return response()->json(['message' => 'Forecast endpoint']);
 })->name('api.forecast');
 
-Route::get('/balance', function () {
-    return response()->json(['message' => 'Balance endpoint']);
-})->name('api.balance');
+Route::get('/balance', [LedgerController::class, 'index'])->name('api.balance');
 
 Route::post('/income', [TransactionController::class, 'storeIncome'])->name('api.income');
 
