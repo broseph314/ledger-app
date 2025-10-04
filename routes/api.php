@@ -1,7 +1,10 @@
 <?php
 
-use Illuminate\Support\Facades\Request;
+use App\Http\Controllers\TransactionController;
+use App\Models\Transaction;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Validator;
 
 Route::get('/transactions', function () {
     return response()->json(['message' => 'Transactions endpoint']);
@@ -19,8 +22,5 @@ Route::post('/income', function () {
     return response()->json(['message' => 'Income endpoint']);
 })->name('api.income');
 
-Route::post('/expense', function (Request $request) {
-    return response()->json(
-        ['message' => 'Expense endpoint']
-    );
-})->name('api.expense');
+
+Route::post('/expense', [TransactionController::class, 'storeExpense'])->name('api.expense');

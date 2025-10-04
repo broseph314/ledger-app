@@ -8,9 +8,6 @@ class Ledger extends Model
 {
     protected $fillable = [
         'entity_id',
-        'date',
-        'description',
-        'amount',
         'type',
         'current_balance',
         'starting_balance',
