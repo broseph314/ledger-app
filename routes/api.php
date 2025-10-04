@@ -18,9 +18,6 @@ Route::get('/balance', function () {
     return response()->json(['message' => 'Balance endpoint']);
 })->name('api.balance');
 
-Route::post('/income', function () {
-    return response()->json(['message' => 'Income endpoint']);
-})->name('api.income');
-
+Route::post('/income', [TransactionController::class, 'storeIncome'])->name('api.income');
 
 Route::post('/expense', [TransactionController::class, 'storeExpense'])->name('api.expense');
