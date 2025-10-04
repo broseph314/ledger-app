@@ -28,6 +28,8 @@ class StoreExpenseRequest extends FormRequest
             'date'        => ['nullable', 'date'],
             'description' => ['nullable', 'string'],
             'ledger_id'   => ['required', 'integer', 'exists:ledgers,id'],
+            'frequency' => ['nullable', 'string', 'in:daily,weekly,monthly,fortnightly,quarterly,yearly,annually'],
+            'end_date' => ['nullable', 'date', 'after:today'],
         ];
     }
 }

@@ -17,5 +17,17 @@ class Recurring extends Model
         'last_processed',
         'last_payment_date',
         'next_payment_date',
+        'start_date',
+        'end_date'
     ];
+
+    public function ledger()
+    {
+        return $this->belongsTo(Ledger::class);
+    }
+
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class);
+    }
 }
