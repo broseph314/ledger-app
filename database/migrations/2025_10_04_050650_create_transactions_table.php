@@ -13,6 +13,12 @@ return new class extends Migration
     {
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('ledger_id')->constrained('ledgers')->onDelete('cascade');
+            $table->date('occurred_on')->default(now());
+            $table->string('type');
+            $table->string('description')->nullable();
+            $table->float('amount');
+            $table->foreignId('recurring_id')->nullable()->constrained('recurrings')->onDelete('set null');
             $table->timestamps();
         });
     }

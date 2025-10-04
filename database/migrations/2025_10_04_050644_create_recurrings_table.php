@@ -13,6 +13,16 @@ return new class extends Migration
     {
         Schema::create('recurrings', function (Blueprint $table) {
             $table->id();
+            $table->string('type');
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->float('amount');
+            $table->string('frequency');
+            $table->date('start_date');
+            $table->date('end_date');
+            $table->date('last_payment_date')->nullable();
+            $table->date('next_payment_date')->nullable();
+            $table->foreignId('ledger_id')->constrained('ledgers')->onDelete('cascade');
             $table->timestamps();
         });
     }
