@@ -1,4 +1,4 @@
-# Ledger App
+# Ledger App - JackApp Technical Exercise
 
 This is a prototype ledger app - not meant for any kind of production usage.
 
