@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('ledger_id')->constrained('ledgers')->onDelete('cascade');
+            $table->foreignId('from_ledger_id')->nullable()->constrained('ledgers')->onDelete('set null');
             $table->date('occurred_on')->default(now());
             $table->string('type');
             $table->string('description')->nullable();

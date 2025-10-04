@@ -23,6 +23,7 @@ return new class extends Migration
             $table->date('last_payment_date')->nullable();
             $table->date('next_payment_date')->nullable();
             $table->foreignId('ledger_id')->constrained('ledgers')->onDelete('cascade');
+            $table->foreignId('from_ledger_id')->nullable()->constrained('ledgers')->onDelete('set null');
             $table->timestamps();
         });
     }
