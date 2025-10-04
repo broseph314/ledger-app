@@ -13,11 +13,24 @@ class LedgerController extends Controller
 
     public function forecast(Request $request): JsonResponse
     {
-        $asAt   = $request->filled('as_at') ? Carbon::parse($request->query('as_at'))->endOfDay() : now();
-        $until  = $request->filled('until') ? Carbon::parse($request->query('until'))->endOfDay() : $asAt->copy()->addDays(90);
-        $withSchedule = $request->boolean('include_schedule', true);
+        $request->validate([
+            'lookahead_months' => ['nullable', 'integer', 'min:1', 'max:36'],
+            'as_at'            => ['nullable', 'date'],
+            'include_monthly'  => ['nullable', 'boolean'],
+        ]);
 
-        // Load business → entities → ledgers, plus base balance sums and active recurrings
+        $asAt   = $request->filled('as_at') ? Carbon::parse($request->query('as_at'))->endOfDay() : now();
+        $lookahead = $request->has('lookahead_months')
+            ? max(1, min(36, (int)$request->query('lookahead_months')))
+            : 3;
+
+        $until = $asAt->copy()->startOfMonth()
+            ->addMonthsNoOverflow($lookahead - 1)
+            ->endOfMonth();
+
+        $includeMonthly = $request->boolean('include_monthly', true);
+
+        // Load business → entities → ledgers, base balance up to as_at, and recurrings
         $businesses = Business::query()
             ->with([
                 'entities.ledgers' => function ($q) use ($asAt) {
@@ -30,7 +43,7 @@ class LedgerController extends Controller
                         $t->where('type', 'credit')->where('occurred_at', '<=', $asAt);
                     }], 'amount');
 
-                    // Load recurrings; keep only those that could affect the window
+                    // Recurrings that could still affect the window
                     $q->with(['recurrings' => function ($r) use ($asAt) {
                         $r->where(function ($w) use ($asAt) {
                             $w->whereNull('end_date')->orWhere('end_date', '>=', $asAt);
@@ -48,30 +61,28 @@ class LedgerController extends Controller
             'data'  => [],
         ];
 
-        $payload['data'] = $businesses->map(function ($business) use ($asAt, $until, $withSchedule) {
+        $payload['data'] = $businesses->map(function ($business) use ($asAt, $until, $includeMonthly) {
             return [
                 'business_id' => $business->id,
                 'business'    => $business->name,
-                'entities'    => $business->entities->map(function ($entity) use ($asAt, $until, $withSchedule) {
+                'entities'    => $business->entities->map(function ($entity) use ($asAt, $until, $includeMonthly) {
                     return [
                         'entity_id' => $entity->id,
                         'entity'    => $entity->name,
-                        'ledgers'   => $entity->ledgers->map(function ($ledger) use ($asAt, $until, $withSchedule) {
-                            // Base balance = starting_balance + (credits - debits) up to as_at
+                        'ledgers'   => $entity->ledgers->map(function ($ledger) use ($asAt, $until, $includeMonthly) {
+                            // Opening = starting_balance + (credits - debits) up to as_at
                             $debits   = (float) ($ledger->debit_sum ?? 0);
-                            $credits  = (float)($ledger->credit_sum ?? 0);
+                            $credits  = (float) ($ledger->credit_sum ?? 0);
                             $opening  = (float) $ledger->starting_balance + ($credits - $debits);
 
-                            // Project recurring events within window
-                            $events = [];
-                            $projected = $opening;
+                            // Monthly buckets YYYY-MM => net change (recurrings)
+                            $monthlyBuckets = $this->initMonthlyBuckets($asAt, $until);
 
+                            // Project recurring occurrences into buckets
                             foreach ($ledger->recurrings as $rec) {
-                                // Determine sign from type (handles if stored amount is already signed too)
                                 $amt = (float) $rec->amount;
                                 $signedAmount = strtolower($rec->type) === 'debit' ? -abs($amt) : abs($amt);
 
-                                // Find the first event >= as_at
                                 $firstCandidate = $rec->next_occurrence
                                     ? Carbon::parse($rec->next_occurrence)
                                     : ($rec->last_payment_date
@@ -80,32 +91,40 @@ class LedgerController extends Controller
 
                                 $cursor = $this->advanceToOrEqual($firstCandidate, $rec->frequency, $asAt);
 
-                                // Iterate occurrences until horizon end or end_date
                                 $endDate = $rec->end_date ? Carbon::parse($rec->end_date)->endOfDay() : null;
                                 while ($cursor->lte($until) && (is_null($endDate) || $cursor->lte($endDate))) {
-                                    $projected += $signedAmount;
-
-                                    if ($withSchedule) {
-                                        $events[] = [
-                                            'recurring_id' => $rec->id,
-                                            'date'         => $cursor->toDateString(),
-                                            'description'  => $rec->description,
-                                            'type'         => strtolower($rec->type),
-                                            'amount'       => $signedAmount,
-                                        ];
+                                    $key = $cursor->format('Y-m');
+                                    if (array_key_exists($key, $monthlyBuckets)) {
+                                        $monthlyBuckets[$key] += $signedAmount;
                                     }
-
                                     $cursor = $this->nextFromFrequency($cursor, $rec->frequency);
                                 }
                             }
 
+                            // Totals
+                            $projectedChange = array_sum($monthlyBuckets);
+                            $projectedEnd    = $opening + $projectedChange;
+
+                            // Shape monthly array (ascending by month)
+                            $monthly = null;
+                            if ($includeMonthly) {
+                                $monthly = collect($monthlyBuckets)
+                                    ->map(fn ($delta, $ym) => [
+                                        'month'            => $ym,                 // '2025-02'
+                                        'projected_change' => round($delta, 2),   // total delta for that month
+                                        'recurring_total'  => round($delta, 2),   // equals projected_change for now
+                                    ])
+                                    ->values()
+                                    ->all();
+                            }
+
                             return [
-                                'ledger_id'                => $ledger->id,
-                                'ledger'                   => $ledger->name,
-                                'opening_balance_at_as_at' => round($opening,2),
-                                'projected_balance_at_until' => round($projected,2),
-                                'projected_change'         => round($projected - $opening,2),
-                                'events'                   => $withSchedule ? $events : null,
+                                'ledger_id'                    => $ledger->id,
+                                'ledger'                       => $ledger->name,
+                                'opening_balance_at_as_at'     => round($opening, 2),
+                                'projected_balance_at_until'   => round($projectedEnd, 2),
+                                'projected_change'             => round($projectedChange, 2),
+                                'monthly'                      => $monthly, // replaces verbose 'events'
                             ];
                         })->values(),
                     ];
@@ -114,6 +133,20 @@ class LedgerController extends Controller
         })->values();
 
         return response()->json($payload);
+    }
+
+    /** Initialize YYYY-MM => 0.0 buckets between asAt and until (inclusive). */
+    private function initMonthlyBuckets(Carbon $asAt, Carbon $until): array
+    {
+        $buckets = [];
+        $cursor = $asAt->copy()->startOfMonth();
+        $end    = $until->copy()->startOfMonth();
+
+        while ($cursor->lte($end)) {
+            $buckets[$cursor->format('Y-m')] = 0.0;
+            $cursor = $cursor->addMonthNoOverflow()->startOfMonth();
+        }
+        return $buckets;
     }
 
     public function index(): JsonResponse
