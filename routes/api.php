@@ -9,9 +9,7 @@ use Illuminate\Support\Facades\Validator;
 
 Route::get('/transactions', [TransactionController::class, 'index'])->name('api.transactions');
 
-Route::get('/forecast', function () {
-    return response()->json(['message' => 'Forecast endpoint']);
-})->name('api.forecast');
+Route::get('/forecast', [LedgerController::class, 'forecast'])->name('api.forecast');
 
 Route::get('/balance', [LedgerController::class, 'index'])->name('api.balance');
 

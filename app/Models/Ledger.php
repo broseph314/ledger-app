@@ -19,7 +19,10 @@ class Ledger extends Model
     {
         return $this->hasMany(Transaction::class);
     }
-
+    public function recurrings()
+    {
+        return $this->hasMany(\App\Models\Recurring::class);
+    }
     public function entity()
     {
         return $this->belongsTo(Entity::class);
