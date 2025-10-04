@@ -49,9 +49,111 @@ At this point, you should be able to interact with all the endpoints in the `rou
 ## Routes
 
 ### POST localhost/api/income
+Allowed parameters
+```
+    "amount": float,                         // dollar value of transactions
+    "date": string,                          // [OPTIONAL] datetime of transaction - leaving blank will default to now() when processed
+    "description": string,                   // [OPTIONAL] brief description of the transaction
+    "ledger_id": int,                        // the ledger being posted to - this 
+    "frequency": string,                     // [OPTIONAL] if this is a recurring transaction, how often it should be processed. Can be 'weekly','fortnightly','monthly','yearly'
+    "end_date": string                       // [OPTIONAL - BUT REQUIRED IF FREQUENCY IS GIVEN] when the recurring transaction will finish
+```
+Example Body:
+`localhost/api/income`
+```json
+{
+    "amount": 100.00,
+    "date": "2025-10-04 15:40",
+    "description": "test transfer",
+    "ledger_id": 1,
+    "from_ledger_id":2,
+    "frequency": "weekly",
+    "end_date": "2026-10-04 15:40"
+}
+```
+Example Response:
+`201 created`
+```json
+{
+    "message": "Income recorded.",
+    "data": {
+        "transaction": {
+            "ledger_id": 1,
+            "amount": 300,
+            "occurred_at": "2025-10-04T15:40:00.000000Z",
+            "description": "test transfer",
+            "type": "credit",
+            "updated_at": "2025-10-04T14:43:35.000000Z",
+            "created_at": "2025-10-04T14:43:35.000000Z",
+            "id": 5663
+        },
+        "linked_expense": {
+            "ledger_id": 2,
+            "amount": -300,
+            "occurred_at": "2025-10-04T15:40:00.000000Z",
+            "description": "Internal transfer from test transfer",
+            "type": "debit",
+            "updated_at": "2025-10-04T14:43:35.000000Z",
+            "created_at": "2025-10-04T14:43:35.000000Z",
+            "id": 5662
+        }
+    }
+}
+```
+
 ### POST localhost/api/expense
+Allowed body parameters
+```
+    "amount": float,                         // dollar value of transactions
+    "date": string,                          // [OPTIONAL] datetime of transaction - leaving blank will default to now() when processed
+    "description": string,                   // [OPTIONAL] brief description of the transaction
+    "ledger_id": int,                        // the ledger being posted to - this 
+    "frequency": string,                     // [OPTIONAL] if this is a recurring transaction, how often it should be processed. Can be 'weekly','fortnightly','monthly','yearly'
+    "end_date": string                       // [OPTIONAL - BUT REQUIRED IF FREQUENCY IS GIVEN] when the recurring transaction will finish
+```
+Example body:
+`localhost/api/expense`
+```json
+{
+    "amount": 100.00,
+    "date": "2025-10-04 15:40",
+    "description": "App subscription",
+    "ledger_id": 1,
+    "frequency": "weekly",
+    "end_date": "2026-10-04 15:40"
+}
+```
+Example response:
+`201 Created`
+```json
+{
+    "message": "Expense recorded.",
+    "transaction": {
+        "ledger_id": 1,
+        "amount": -100,
+        "occurred_at": "2025-10-04T15:40:00.000000Z",
+        "description": "test transfer",
+        "type": "debit",
+        "updated_at": "2025-10-04T14:43:13.000000Z",
+        "created_at": "2025-10-04T14:43:13.000000Z",
+        "id": 5661
+    }
+}
+```
+
+
+
 ### GET localhost/api/transactions
+I never got round to adding parameters, this will just dump the entire transaction list to the api endpoint. You'll get:
+
+
 ### GET localhost/api/forecast
+Allowed query parameters
+```
+lookahead_months: int                         // [OPTIONAL] (default 12) how many months to look ahead into the future for a forecast. Will be less accurate long-term as recurring transactions will fall off as their end-dates are met.
+as_at: string                                 // [OPTIONAL] 
+```
+
 ### GET localhost/api/balance
 
 
