@@ -7,6 +7,7 @@ use App\Models\Ledger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use App\Models\Transaction;
 
 class LedgerController extends Controller
 {
@@ -75,8 +76,8 @@ class LedgerController extends Controller
                             $credits  = (float) ($ledger->credit_sum ?? 0);
                             $opening  = (float) $ledger->starting_balance + ($credits - $debits);
 
-                            // Monthly buckets YYYY-MM => net change (recurrings)
-                            $monthlyBuckets = $this->initMonthlyBuckets($asAt, $until);
+                            // Monthly buckets YYYY-MM => recurring-only net change
+                            $monthlyRecurring = $this->initMonthlyBuckets($asAt, $until);
 
                             // Project recurring occurrences into buckets
                             foreach ($ledger->recurrings as $rec) {
@@ -94,29 +95,30 @@ class LedgerController extends Controller
                                 $endDate = $rec->end_date ? Carbon::parse($rec->end_date)->endOfDay() : null;
                                 while ($cursor->lte($until) && (is_null($endDate) || $cursor->lte($endDate))) {
                                     $key = $cursor->format('Y-m');
-                                    if (array_key_exists($key, $monthlyBuckets)) {
-                                        $monthlyBuckets[$key] += $signedAmount;
+                                    if (array_key_exists($key, $monthlyRecurring)) {
+                                        $monthlyRecurring[$key] += $signedAmount;
                                     }
                                     $cursor = $this->nextFromFrequency($cursor, $rec->frequency);
                                 }
                             }
+                            $historical = $this->historicalMonthlyProjection($ledger, $asAt, $until, 12); // 12-month lookback
+                            $monthlyCombined = $monthlyRecurring;
+                            foreach ($monthlyCombined as $ym => $val) {
+                                $monthlyCombined[$ym] = round(($monthlyRecurring[$ym] ?? 0) + ($historical[$ym] ?? 0), 2);
+                            }
 
-                            // Totals
-                            $projectedChange = array_sum($monthlyBuckets);
+                            $projectedChange = array_sum($monthlyCombined);
                             $projectedEnd    = $opening + $projectedChange;
 
                             // Shape monthly array (ascending by month)
-                            $monthly = null;
-                            if ($includeMonthly) {
-                                $monthly = collect($monthlyBuckets)
-                                    ->map(fn ($delta, $ym) => [
-                                        'month'            => $ym,                 // '2025-02'
-                                        'projected_change' => round($delta, 2),   // total delta for that month
-                                        'recurring_total'  => round($delta, 2),   // equals projected_change for now
-                                    ])
-                                    ->values()
-                                    ->all();
-                            }
+                            $monthly = collect($monthlyCombined)->map(function ($delta, $ym) use ($monthlyRecurring, $historical) {
+                                return [
+                                    'month'            => $ym,
+                                    'recurring_total'  => round($monthlyRecurring[$ym] ?? 0, 2),
+                                    'historical_total' => round($historical[$ym] ?? 0, 2),
+                                    'projected_change' => round($delta, 2),
+                                ];
+                            })->values()->all();
 
                             return [
                                 'ledger_id'                    => $ledger->id,
@@ -124,7 +126,7 @@ class LedgerController extends Controller
                                 'opening_balance_at_as_at'     => round($opening, 2),
                                 'projected_balance_at_until'   => round($projectedEnd, 2),
                                 'projected_change'             => round($projectedChange, 2),
-                                'monthly'                      => $monthly, // replaces verbose 'events'
+                                'monthly'                      => $monthly,
                             ];
                         })->values(),
                     ];
@@ -216,10 +218,126 @@ class LedgerController extends Controller
         return $cursor;
     }
 
-     private function historicalProjectionDelta(Ledger $ledger, Carbon $from, Carbon $until): float
-     {
-         // TODO: Build a model from past transactions (seasonality, moving averages, etc.)
-         // Return a delta to add to $projected.
-     }
+    /**
+     * Forecast non-recurring net change per month in [asAt..until] using a seasonal
+     * month-of-year average built from the last $lookbackMonths before $asAt.
+     *
+     * Returns: ['YYYY-MM' => float delta, ...] for the forecast window.
+     */
+    private function historicalMonthlyProjection(
+        Ledger $ledger,
+        Carbon $asAt,
+        Carbon $until,
+        int $lookbackMonths = 12
+    ): array {
+        // Build keys for the forecast window
+        $forecastKeys = array_keys($this->initMonthlyBuckets($asAt, $until));
 
+        // History window (e.g., 12 full months ending at asAt)
+        $histStart = $asAt->copy()->startOfMonth()->subMonthsNoOverflow($lookbackMonths)->startOfMonth();
+        $histEnd   = $asAt->copy()->endOfDay();
+
+        // Initialize all history months to 0 so averages use consistent denominators
+        $histMonths = [];
+        $cursor = $histStart->copy();
+        while ($cursor->lte($histEnd)) {
+            $histMonths[$cursor->format('Y-m')] = 0.0;
+            $cursor->addMonthNoOverflow()->startOfMonth();
+        }
+
+        // 1) Sum ALL historical transactions
+        $txns = Transaction::query()
+            ->where('ledger_id', $ledger->id)
+            ->whereBetween('occurred_at', [$histStart, $histEnd])
+            ->get(['occurred_at', 'amount']);
+
+        foreach ($txns as $t) {
+            $ym = Carbon::parse($t->occurred_at)->format('Y-m');
+            if (isset($histMonths[$ym])) {
+                $histMonths[$ym] += (float) $t->amount;
+            }
+        }
+
+        // 2) Subtract recurring occurrences within the same history window
+        $recHist = $this->recurringMonthlyTotals($ledger->recurrings ?? collect(), $histStart, $histEnd);
+        foreach ($histMonths as $ym => $total) {
+            $histMonths[$ym] = $total - ($recHist[$ym] ?? 0.0);
+        }
+
+        // 3) Build month-of-year seasonal averages for non-recurring component
+        $moTotals = array_fill(1, 12, 0.0);
+        $moCounts = array_fill(1, 12, 0);
+        foreach ($histMonths as $ym => $val) {
+            [$y, $m] = explode('-', $ym);
+            $mo = (int) $m;
+            $moTotals[$mo] += $val;
+            $moCounts[$mo] += 1;
+        }
+
+        $overallAvg = 0.0;
+        if (count($histMonths) > 0) {
+            $overallAvg = array_sum($histMonths) / count($histMonths);
+        }
+
+        $moAvg = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $moAvg[$m] = $moCounts[$m] > 0 ? ($moTotals[$m] / $moCounts[$m]) : $overallAvg;
+        }
+
+        // 4) Project forward: pick the avg for that calendar month-of-year
+        $out = [];
+        foreach ($forecastKeys as $ym) {
+            [$y, $m] = explode('-', $ym);
+            $mo = (int) $m;
+            $out[$ym] = $moAvg[$mo] ?? $overallAvg; // may be positive or negative
+        }
+
+        return $out;
+    }
+
+    /**
+     * Aggregate recurring amounts per month between [$start..$end].
+     * Returns ['YYYY-MM' => float].
+     */
+    private function recurringMonthlyTotals($recurrings, Carbon $start, Carbon $end): array
+    {
+        $totals = [];
+
+        foreach ($recurrings as $rec) {
+            $amt = (float) $rec->amount;
+            $signed = strtolower($rec->type) === 'debit' ? -abs($amt) : abs($amt);
+
+            // Pick an anchor to start stepping from
+            if ($rec->last_payment_date) {
+                $anchor = $this->nextFromFrequency(Carbon::parse($rec->last_payment_date), $rec->frequency);
+            } elseif ($rec->next_occurrence) {
+                $anchor = Carbon::parse($rec->next_occurrence);
+            } else {
+                continue; // no basis to generate occurrences
+            }
+
+            // Move to >= $start
+            $cursor = $this->advanceToOrEqual($anchor, $rec->frequency, $start);
+            $endDate = $rec->end_date ? Carbon::parse($rec->end_date)->endOfDay() : null;
+
+            $guard = 0;
+            while ($cursor->lte($end) && (is_null($endDate) || $cursor->lte($endDate))) {
+                $ym = $cursor->format('Y-m');
+                $totals[$ym] = ($totals[$ym] ?? 0.0) + $signed;
+
+                $cursor = $this->nextFromFrequency($cursor, $rec->frequency);
+                if (++$guard > 1000) break; // safety
+            }
+        }
+
+        // Ensure all months in [start..end] exist (for clean subtraction)
+        $cur = $start->copy()->startOfMonth();
+        $endKey = $end->copy()->startOfMonth();
+        while ($cur->lte($endKey)) {
+            $totals[$cur->format('Y-m')] = $totals[$cur->format('Y-m')] ?? 0.0;
+            $cur->addMonthNoOverflow()->startOfMonth();
+        }
+
+        return $totals;
+    }
 }
