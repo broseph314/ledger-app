@@ -2,8 +2,6 @@
 
 This is a prototype ledger app - not meant for any kind of production usage.
 
-# Assumptions
-
 # How to run
 
 I used laravel sail - I find it easy and quick to spin up all the things you need. So to recreate the code and get this up and running, you need a couple of things:
